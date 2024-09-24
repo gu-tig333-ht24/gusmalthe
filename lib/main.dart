@@ -1,125 +1,296 @@
 import 'package:flutter/material.dart';
+import 'task_widget.dart';
+import 'todo_api.dart';
+import 'package:multi_dropdown/multi_dropdown.dart'; // I found a package for a dropdown menu at: https://pub.dev/packages/multi_dropdown/install
 
 void main() {
-  runApp(const MyApp());
+  runApp(const TodoApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+Route _taskScreenRoute(Task task) {
+  return PageRouteBuilder(
+    pageBuilder: (context, animation, secondaryAnimation) => TaskScreen(task: task),
+    transitionDuration: const Duration(milliseconds: 400),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      const begin = Offset(1.0, 0.0); // Slide in from the right
+      const end = Offset.zero;
+      const curve = Curves.easeInOut; // Smooth transition
 
-  // This widget is the root of your application.
+      var tween = Tween(begin: begin, end: end);
+      var curvedAnimation = CurvedAnimation(parent: animation, curve: curve);
+      var offsetAnimation = tween.animate(curvedAnimation);
+
+      return SlideTransition(
+        position: offsetAnimation,
+        child: Container(
+          decoration: BoxDecoration(
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                offset: const Offset(0, 4),
+                blurRadius: 80,
+                spreadRadius: 80
+              ),
+            ],
+          ),
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
+class TodoApp extends StatelessWidget {
+  const TodoApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Todo List',
+      debugShowCheckedModeBanner: false, // Hides the debug banner in the AppBar
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color.fromARGB(255, 132, 201, 87),
+          // brightness: Brightness.dark,
+        ),
+        // appBarTheme: AppBarTheme(),
+        // scaffoldBackgroundColor: const Color.fromARGB(255, 50, 56, 56),
+        useMaterial3: true,        
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const TodoListScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class TodoListScreen extends StatefulWidget {
+  const TodoListScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  _TodoListScreenState createState() => _TodoListScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _TodoListScreenState extends State<TodoListScreen> {
+  final List<Task> _tasks = [];
+  bool filterFinished = false;
+  bool filterUnfinished = false;
+  Future<void> _loadTasks(List<String> filter) async {
+    try {
+      List<Task> tasks = await fetchTodosAsTasks(API_KEY);
+      if (filter.isNotEmpty) {
+        List<Task> filteredTasks = tasks.where((task) {
+          if (filter.contains("Finished") && task.isCompleted) {
+            return false;
+          }
+          if (filter.contains("Unfinished") && !task.isCompleted) {
+            return false;
+          }
+          return true;
+        }).toList();
 
-  void _incrementCounter() {
+        setState(() {
+          _tasks.clear();
+          _tasks.addAll(filteredTasks);
+        });
+      }
+      else{
+        setState(() {
+          _tasks.clear();
+          _tasks.addAll(tasks);
+        });
+      }
+
+    } catch (e) {
+      print('Error loading tasks: $e');
+    }
+  }
+  void _addTask(Task task) async {
+    // We need to do this so that the added task has an id
+    var addedTodo = await addTodo(API_KEY, task);
+    var addedTask = Task.fromJson(addedTodo);
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _tasks.add(addedTask);
     });
+  }
+  void _removeTask(Task task) async {
+    await deleteTodo(API_KEY, task);
+    setState(() {
+      _tasks.remove(task);
+    });
+  }
+  void _editTask(Task task, int index) async {
+    await updateTodo(API_KEY, task);
+    setState(() {
+      _tasks[index] = task;
+    });
+  }
+  void _toggleTask(Task task) {
+    setState(() {
+      task.isCompleted = !task.isCompleted;
+      updateTodo(API_KEY, task);
+    });
+  }
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadTasks(List.empty());
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('Todo List'),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      body: Column(
+        children: [
+          Padding(padding: const EdgeInsets.only(top: 2.5, left: 5, right: 5),
+            child: MultiDropdown<String>(
+              items: [
+                DropdownItem(label: "Finished", value: "Finished"),
+                DropdownItem(label: "Unfinished", value: "Unfinished")
+              ],
+              enabled: true,
+              fieldDecoration: FieldDecoration(
+                hintText: 'Hide',
+                hintStyle: const TextStyle(color: Colors.black87),
+                prefixIcon: const Icon(Icons.filter_alt),
+                showClearIcon: false,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.grey),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+              onSelectionChange: (selectedItems) {
+                _loadTasks(selectedItems);
+              },
+            ),
+          ),
+          Expanded(child: ListView.builder(
+            itemCount: _tasks.length,
+            // ADD TASKS TO LIST
+            itemBuilder: (context, index) {
+              return TaskWidget(
+                title: _tasks[index].title,
+                isCompleted: _tasks[index].isCompleted,
+
+                onTap: () async {
+                  final result = await Navigator.of(context).push(_taskScreenRoute(_tasks[index]));
+                  if (result != null) {
+                    _editTask(result, index);
+                  }
+                },
+                onToggle: () => _toggleTask(_tasks[index]),
+                onDelete: () => _removeTask(_tasks[index]),
+              );
+            },
+          ),)
+          
+        ],
+      ),
+      // ADD TASK BUTTON
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          final result = await Navigator.of(context).push(_taskScreenRoute(Task(id: "", title: "", body: "")));
+          if (result != null) {
+            _addTask(result);
+          }
+        },
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+class TaskScreen extends StatelessWidget {
+  final Task task;
+  
+  // CONSTRUCTOR
+  const TaskScreen({
+    super.key,
+    required this.task,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final TextEditingController taskTitleController = TextEditingController(text: task.title);
+    final TextEditingController taskBodyController = TextEditingController(text: task.body);
+    String taskContextTitle;
+    if (task.title != ""){
+      taskContextTitle = "Edit task";
+    }
+    else{
+      taskContextTitle = "Create New Task";
+    }
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: Text(task.title),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.only( left: 40, right: 40, top: 15),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // TEXT
             Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+              taskContextTitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                ),
             ),
+
+            const SizedBox(height: 20),
+
+            // TASK TITLE
+            TextField(
+              controller: taskTitleController,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Title',
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // TASK BODY
+            TextField(
+              keyboardType: TextInputType.multiline,
+              maxLines: 4,
+              controller: taskBodyController,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Add Note...',
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // COMFIRM BUTTON
+            ElevatedButton(
+              onPressed: () {
+                // When the confirm button is pressed, pop and return the task
+                task.title = taskTitleController.text;
+                task.body = taskBodyController.text;
+                if (taskTitleController.text.isNotEmpty) {
+                  Navigator.pop(context, task);
+                }
+              },
+              child: const Text('Confirm'),
+            ),
+
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
