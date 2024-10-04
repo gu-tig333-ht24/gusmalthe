@@ -209,7 +209,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
   }
 }
 
-class TaskScreen extends StatelessWidget {
+class TaskScreen extends StatefulWidget {
   final Task task;
   
   // CONSTRUCTOR
@@ -219,11 +219,31 @@ class TaskScreen extends StatelessWidget {
   });
 
   @override
+  State<TaskScreen> createState() => _TaskScreenState();
+}
+
+class _TaskScreenState extends State<TaskScreen> {
+  late TextEditingController taskTitleController;
+  late TextEditingController taskBodyController;
+
+  @override
+  void initState() {
+    super.initState();
+    taskTitleController = TextEditingController(text: widget.task.title);
+    taskBodyController = TextEditingController(text: widget.task.body);
+  }
+
+  @override
+  void dispose() {
+    taskTitleController.dispose();
+    taskBodyController.dispose();
+    super.dispose();
+  }
+  
+  @override
   Widget build(BuildContext context) {
-    final TextEditingController taskTitleController = TextEditingController(text: task.title);
-    final TextEditingController taskBodyController = TextEditingController(text: task.body);
     String taskContextTitle;
-    if (task.title != ""){
+    if (widget.task.title != ""){
       taskContextTitle = "Edit task";
     }
     else{
@@ -232,7 +252,7 @@ class TaskScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(task.title),
+        title: Text(widget.task.title),
       ),
       body: Padding(
         padding: const EdgeInsets.only( left: 40, right: 40, top: 15),
@@ -279,10 +299,10 @@ class TaskScreen extends StatelessWidget {
             ElevatedButton(
               onPressed: () {
                 // When the confirm button is pressed, pop and return the task
-                task.title = taskTitleController.text;
-                task.body = taskBodyController.text;
+                widget.task.title = taskTitleController.text;
+                widget.task.body = taskBodyController.text;
                 if (taskTitleController.text.isNotEmpty) {
-                  Navigator.pop(context, task);
+                  Navigator.pop(context, widget.task);
                 }
               },
               child: const Text('Confirm'),
