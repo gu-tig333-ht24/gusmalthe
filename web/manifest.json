@@ -1,6 +1,6 @@
 {
-    "name": "template",
-    "short_name": "template",
+    "name": "todo_app_2",
+    "short_name": "todo_app_2",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
